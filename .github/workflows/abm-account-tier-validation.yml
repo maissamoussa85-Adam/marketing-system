@@ -1,0 +1,150 @@
+name: ABM Account Tier Validation
+
+# Runs automatically when account data is pushed,
+# or manually from the Actions tab for any campaign.
+on:
+  push:
+    paths:
+      - 'ABM-Playbooks/**.csv'
+  pull_request:
+    paths:
+      - 'ABM-Playbooks/**.csv'
+  workflow_dispatch:
+    inputs:
+      csv_file:
+        description: 'CSV file to validate (relative to repo root)'
+        required: false
+        default: 'ABM-Playbooks/account-channel-matrix.csv'
+
+jobs:
+  validate-and-summarise:
+    name: Validate CSV and Generate Tier Summary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas tabulate
+
+      - name: Validate and summarise account tiers
+        run: |
+          python << 'EOF'
+          import pandas as pd
+          import os
+          import sys
+          from tabulate import tabulate
+
+          # ── Configuration ──────────────────────────────────────────────────
+          # Change REQUIRED_COLUMNS to match your CSV for future projects
+          REQUIRED_COLUMNS = [
+              'name', 'annualacv', 'lifetimeacv', 'priority_score',
+              'tier', 'primary_channel', 'secondary_channel'
+          ]
+
+          # Find all CSVs in ABM-Playbooks or use workflow_dispatch input
+          import glob
+          csv_files = glob.glob('ABM-Playbooks/**/*.csv', recursive=True) or \
+                      glob.glob('ABM-Playbooks/*.csv')
+
+          if not csv_files:
+              print("No CSV files found in ABM-Playbooks/")
+              sys.exit(1)
+
+          all_output = []
+          errors_found = False
+
+          for csv_path in csv_files:
+              print(f"\n{'='*60}")
+              print(f"Processing: {csv_path}")
+              print('='*60)
+
+              # ── Load CSV ───────────────────────────────────────────────────
+              try:
+                  df = pd.read_csv(csv_path)
+              except Exception as e:
+                  print(f"ERROR: Could not read {csv_path}: {e}")
+                  errors_found = True
+                  continue
+
+              # ── Column Validation ──────────────────────────────────────────
+              missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+              if missing:
+                  print(f"ERROR: Missing required columns: {missing}")
+                  errors_found = True
+                  continue
+              print(f"Column validation passed ({len(df.columns)} columns found)")
+
+              # ── Tier Summary ───────────────────────────────────────────────
+              df['tier'] = df['tier'].astype(str).str.strip()
+              tier_summary = df.groupby('tier').agg(
+                  accounts=('name', 'count'),
+                  total_annual_acv=('annualacv', 'sum'),
+                  total_lifetime_acv=('lifetimeacv', 'sum'),
+                  avg_score=('priority_score', 'mean')
+              ).reset_index().sort_values('tier')
+
+              tier_summary['total_annual_acv'] = tier_summary['total_annual_acv'].apply(
+                  lambda x: f"${x:,.0f}")
+              tier_summary['total_lifetime_acv'] = tier_summary['total_lifetime_acv'].apply(
+                  lambda x: f"${x:,.0f}")
+              tier_summary['avg_score'] = tier_summary['avg_score'].round(1)
+
+              tier_summary.columns = ['Tier', 'Accounts', 'Total Annual ACV',
+                                       'Total Lifetime ACV', 'Avg Score']
+
+              print("\nTier Summary:")
+              print(tabulate(tier_summary, headers='keys', tablefmt='github', index=False))
+
+              # ── Channel Breakdown ──────────────────────────────────────────
+              channel_counts = df['primary_channel'].value_counts().reset_index()
+              channel_counts.columns = ['Primary Channel', 'Accounts']
+
+              print("\nChannel Breakdown:")
+              print(tabulate(channel_counts.head(10), headers='keys',
+                             tablefmt='github', index=False))
+
+              # ── Active vs Churned ──────────────────────────────────────────
+              active = (df['annualacv'] > 0).sum()
+              churned = (df['annualacv'] == 0).sum()
+              total_active_acv = df[df['annualacv'] > 0]['annualacv'].sum()
+              total_ltv = df['lifetimeacv'].sum()
+
+              print(f"\nAccount Health:")
+              print(f"  Active (ACV > $0):  {active} accounts | "
+                    f"Total ACV: ${total_active_acv:,.0f}")
+              print(f"  Churned (ACV = $0): {churned} accounts | "
+                    f"Total LTV at risk: ${df[df['annualacv']==0]['lifetimeacv'].sum():,.0f}")
+              print(f"  Total Lifetime ACV: ${total_ltv:,.0f}")
+
+              # ── Write to GitHub Job Summary ────────────────────────────────
+              summary_path = os.environ.get('GITHUB_STEP_SUMMARY', '/dev/null')
+              with open(summary_path, 'a') as f:
+                  f.write(f"## ABM Account Tier Validation\n\n")
+                  f.write(f"**File:** `{csv_path}`  \n")
+                  f.write(f"**Total accounts:** {len(df)}  \n")
+                  f.write(f"**Active customers:** {active}  \n")
+                  f.write(f"**Churned / historical:** {churned}\n\n")
+                  f.write("### Tier Summary\n\n")
+                  f.write(tabulate(tier_summary, headers='keys',
+                                   tablefmt='github', index=False))
+                  f.write("\n\n### Channel Breakdown\n\n")
+                  f.write(tabulate(channel_counts.head(10), headers='keys',
+                                   tablefmt='github', index=False))
+                  f.write("\n\n---\n")
+
+          if errors_found:
+              sys.exit(1)
+
+          print("\nAll files validated successfully.")
+          EOF
+
+      - name: Confirm success
+        if: success()
+        run: echo "Account tier validation passed. Summary written to GitHub Actions job summary."
