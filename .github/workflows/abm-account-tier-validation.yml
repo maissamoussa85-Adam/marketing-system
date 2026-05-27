@@ -6,9 +6,11 @@ on:
   push:
     paths:
       - 'ABM-Playbooks/**.csv'
+      - '.github/workflows/abm-account-tier-validation.yml'
   pull_request:
     paths:
       - 'ABM-Playbooks/**.csv'
+      - '.github/workflows/abm-account-tier-validation.yml'
   workflow_dispatch:
     inputs:
       csv_file:
