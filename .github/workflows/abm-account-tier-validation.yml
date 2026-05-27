@@ -100,7 +100,7 @@ jobs:
                                        'Total Lifetime ACV', 'Avg Score']
 
               print("\nTier Summary:")
-              print(tabulate(tier_summary, headers='keys', tablefmt='github', index=False))
+              print(tabulate(tier_summary, headers='keys', tablefmt='github', showindex=False))
 
               # ── Channel Breakdown ──────────────────────────────────────────
               channel_counts = df['primary_channel'].value_counts().reset_index()
@@ -108,7 +108,7 @@ jobs:
 
               print("\nChannel Breakdown:")
               print(tabulate(channel_counts.head(10), headers='keys',
-                             tablefmt='github', index=False))
+                             tablefmt='github', showindex=False))
 
               # ── Active vs Churned ──────────────────────────────────────────
               active = (df['annualacv'] > 0).sum()
@@ -133,10 +133,10 @@ jobs:
                   f.write(f"**Churned / historical:** {churned}\n\n")
                   f.write("### Tier Summary\n\n")
                   f.write(tabulate(tier_summary, headers='keys',
-                                   tablefmt='github', index=False))
+                                   tablefmt='github', showindex=False))
                   f.write("\n\n### Channel Breakdown\n\n")
                   f.write(tabulate(channel_counts.head(10), headers='keys',
-                                   tablefmt='github', index=False))
+                                   tablefmt='github', showindex=False))
                   f.write("\n\n---\n")
 
           if errors_found:
