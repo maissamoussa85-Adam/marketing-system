@@ -1,18 +1,2 @@
-# Ignore everything by default
-*
-
-# Except our marketing system files
-!.gitignore
-!CLAUDE.md
-!Context Engine/
-!Context Engine/**
-!Blogs/
-!Blogs/**
-!ABM-Playbooks/
-!ABM-Playbooks/**
-!.github/
-!.github/**
-!OneDrive/
-!OneDrive/Desktop/
-!OneDrive/Desktop/CKEditor Campaign/
-!OneDrive/Desktop/CKEditor Campaign/**
+.DS_Store
+Thumbs.db
